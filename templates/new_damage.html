@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Nova avaria | CBA 2.0{% endblock %}
+{% block content %}
+<div class="page-heading"><div><a href="{{url_for('damages')}}" class="back">← Ocorrências</a><h1>Registrar nova avaria</h1><p>Preencha as informações para gerar um protocolo rastreável.</p></div></div>
+<form method="post" enctype="multipart/form-data" id="damage-form" class="stack"><input type="hidden" name="csrf_token" value="{{csrf_token}}">
+<section class="panel"><div class="form-section-header"><span class="step">01</span><div><h2>Identificação do produto</h2><p>O que foi danificado?</p></div></div><div class="fields">
+<label>Produto <span class="required">*</span><input name="product" required maxlength="160" placeholder="Ex.: Produto teste"></label>
+<label>Código SKU <span class="required">*</span><input name="sku" required maxlength="80" placeholder="Código de identificação"></label>
+<label>Quantidade <span class="required">*</span><input type="number" name="quantity" min="1" max="1000000" required></label>
+<label>Valor total da avaria (R$) <span class="required">*</span><input type="number" name="value" min="0" max="9999999999" step="0.01" required placeholder="0,00"></label>
+<label>Lote<input name="lot" maxlength="80" placeholder="Opcional"></label>
+<label>Validade<input type="date" name="expiry_date"></label>
+</div></section>
+<section class="panel"><div class="form-section-header"><span class="step">02</span><div><h2>Local e responsável</h2><p>Onde e em qual etapa aconteceu?</p></div></div><div class="fields">
+<label>Centro de distribuição <span class="required">*</span><select name="site_id" {% if viewer.role!='admin' %}disabled{% endif %} required>{% for site in sites %}<option value="{{site.id}}" {% if site.id==viewer.site_id %}selected{% endif %}>{{site.name}}</option>{% endfor %}</select>{% if viewer.role!='admin' %}<input type="hidden" name="site_id" value="{{viewer.site_id}}">{% endif %}</label>
+<label>Setor <span class="required">*</span><input name="sector" required maxlength="100" placeholder="Ex.: Câmara 02"></label>
+<label>Etapa da operação <span class="required">*</span><select name="stage" required>{% for item in stages %}<option>{{item}}</option>{% endfor %}</select></label>
+<label>Turno <span class="required">*</span><select name="shift" required>{% for item in shifts %}<option>{{item}}</option>{% endfor %}</select></label>
+<label>Localização / endereço <span class="required">*</span><input name="location" maxlength="100" required placeholder="Ex.: Rua 04 / nível 02"></label>
+<label>Responsável informado <span class="required">*</span><input name="responsible_name" maxlength="120" required placeholder="Nome informado na ocorrência"></label>
+</div></section>
+<section class="panel"><div class="form-section-header"><span class="step">03</span><div><h2>Classificação e evidências</h2><p>Identifique a natureza da ocorrência e registre fotos.</p></div></div><div class="fields">
+<label>Tipo de avaria <span class="required">*</span><select name="category" required>{% for item in categories %}<option>{{item}}</option>{% endfor %}</select></label>
+<label>Causa provável <span class="required">*</span><select name="cause" required>{% for item in causes %}<option>{{item}}</option>{% endfor %}</select></label>
+<label>Gravidade <span class="required">*</span><select name="severity" required>{% for item in severities %}<option>{{item}}</option>{% endfor %}</select></label>
+<label>Fotos (até 3)<input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple><small>Use câmera ou galeria. Máximo total: 11 MB.</small></label>
+<label class="full">Descrição e observações<textarea name="description" maxlength="500" rows="3" placeholder="Descreva as condições da avaria, causas observadas e outras informações."></textarea></label>
+</div></section>
+<div class="form-actions"><a class="button ghost" href="{{url_for('dashboard')}}">Cancelar</a><button class="primary" type="submit">Salvar ocorrência e gerar protocolo →</button></div>
+</form>
+{% endblock %}
