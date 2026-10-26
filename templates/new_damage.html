@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Nova avaria | CBA 2.0{% endblock %}
+{% block title %}Nova avaria | CBA 3.0{% endblock %}
 {% block content %}
 <div class="page-heading"><div><a href="{{url_for('damages')}}" class="back">← Ocorrências</a><h1>Registrar nova avaria</h1><p>Preencha as informações para gerar um protocolo rastreável.</p></div></div>
 <form method="post" enctype="multipart/form-data" id="damage-form" class="stack"><input type="hidden" name="csrf_token" value="{{csrf_token}}">

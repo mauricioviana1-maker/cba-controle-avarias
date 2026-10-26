@@ -77,7 +77,7 @@ def test_migrate_legacy_data_and_admin_permissions(module):
 
 def test_health_login_and_new_damage_with_photo(module):
     client = module.app.test_client()
-    assert client.get('/health').json == {'status':'ok','version':'2.0.0'}
+    assert client.get('/health').json == {'status':'ok','version':'3.0.0'}
     assert client.get('/').status_code == 302
     login(client)
     client.get('/damages/new')

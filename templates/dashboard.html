@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">PAINEL OPERACIONAL</span><h1>Visão geral <span class="heading-accent">/ CBA 2.0</span></h1><p>Indicadores e ocorrências recentes do seu ambiente.</p></div><a class="button primary" href="{{url_for('new_damage')}}">+ Registrar avaria</a></div>
+<div class="page-heading"><div><span class="eyebrow">PAINEL OPERACIONAL</span><h1>Visão geral <span class="heading-accent">/ CBA 3.0</span></h1><p>Indicadores e ocorrências recentes do seu ambiente.</p></div><a class="button primary" href="{{url_for('new_damage')}}">+ Registrar avaria</a></div>
 <div class="stats">
   <article class="stat"><div class="stat-top"><span>Registros recentes</span><span class="stat-icon">◫</span></div><strong>{{total}}</strong><small>Últimos 500 registros visíveis</small></article>
   <article class="stat"><div class="stat-top"><span>Em tratamento</span><span class="stat-icon">◷</span></div><strong>{{opened}}</strong><small>Ocorrências ainda não encerradas</small></article>

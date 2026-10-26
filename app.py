@@ -10,6 +10,12 @@ import csv
 import hashlib
 import io
 import os
+import re
+import math
+import statistics
+from collections import Counter, defaultdict
+from uuid import UUID
+import qrcode
 import secrets
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -22,7 +28,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import func, inspect, or_, text
 from werkzeug.security import check_password_hash, generate_password_hash
 
-VERSION = '2.0.0'
+VERSION = '3.0.0'
 ROLES = {'operador', 'lider', 'gestor', 'admin'}
 STAGES = ('Recebimento', 'Armazenagem', 'Separação', 'Expedição', 'Transporte', 'Outros')
 SHIFTS = ('1º turno', '2º turno', '3º turno')
@@ -118,6 +124,7 @@ class Damage(db.Model):
     approved_by_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     approved_by = db.relationship('User', foreign_keys=[approved_by_id])
     resolved_at = db.Column(db.DateTime(timezone=True))
+    offline_key = db.Column(db.String(64), unique=True)
 
 
 class DamagePhoto(db.Model):
@@ -147,6 +154,55 @@ class LoginFailure(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_utc)
 
 
+
+# CBA 3.0: additive tables; never erase historical damage rows.
+class ActionPlan(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False, index=True)
+    damage_id = db.Column(db.Integer, db.ForeignKey('damage.id'), nullable=False, index=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_utc)
+    what = db.Column(db.String(250), nullable=False)
+    why = db.Column(db.String(250), nullable=False)
+    where = db.Column(db.String(150), nullable=False)
+    when_due = db.Column(db.Date, nullable=False)
+    who = db.Column(db.String(120), nullable=False)
+    how = db.Column(db.String(500), nullable=False)
+    how_much = db.Column(db.Numeric(12,2), nullable=False, default=0)
+    status = db.Column(db.String(20), nullable=False, default='Pendente')
+    completed_at = db.Column(db.DateTime(timezone=True))
+    damage = db.relationship('Damage')
+
+
+class SlaPolicy(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False)
+    severity = db.Column(db.String(20), nullable=False)
+    hours = db.Column(db.Integer, nullable=False)
+    __table_args__ = (db.UniqueConstraint('site_id', 'severity', name='uq_sla_cd_severity'),)
+
+
+class ReportSchedule(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False, index=True)
+    frequency = db.Column(db.String(12), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    last_run_at = db.Column(db.DateTime(timezone=True))
+    created_at = db.Column(db.DateTime(timezone=True), default=now_utc)
+
+
+class ReportRun(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False, index=True)
+    schedule_id = db.Column(db.Integer, db.ForeignKey('report_schedule.id'), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_utc)
+    rows_count = db.Column(db.Integer, nullable=False, default=0)
+    content = db.Column(db.LargeBinary, nullable=False)
+    schedule = db.relationship('ReportSchedule')
+
+
 # Additive migrations for the CBA 1.x tables. Never drop tables/data automatically.
 # Production changes beyond this initial upgrade should be managed by Alembic.
 ADDITIONS = {
@@ -161,6 +217,7 @@ ADDITIONS = {
         'updated_at': 'TIMESTAMP WITH TIME ZONE',
         'approved_at': 'TIMESTAMP WITH TIME ZONE',
         'approved_by_id': 'INTEGER', 'resolved_at': 'TIMESTAMP WITH TIME ZONE',
+        'offline_key': 'VARCHAR(64)',
     },
 }
 
@@ -179,6 +236,8 @@ def initialize():
                         definition = definition.replace('TIMESTAMP WITH TIME ZONE', 'DATETIME')
                     connection.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {definition}'))
     db.create_all()
+    with db.engine.begin() as connection:
+        connection.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS uq_damage_offline_key ON damage (offline_key)'))
     site = db.session.execute(db.select(Site).where(Site.code == 'PILOTO')).scalar_one_or_none()
     if not site:
         site = Site(code='PILOTO', name='CD Demonstração (dados fictícios)')
@@ -270,6 +329,8 @@ def audit(action, damage=None, detail=''):
 
 @app.before_request
 def csrf_protection():
+    if request.path == '/jobs/reports/run':
+        return  # job route authenticates a separate non-CSRF bearer secret
     if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
         expected = session.get('csrf_token')
         provided = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
@@ -433,24 +494,25 @@ def amount(raw, field='valor'):
         raise ValueError(f'{field}: informe um valor válido.')
 
 
-def parse_damage_form(is_new=True):
-    product = request.form.get('product', '').strip()[:160]
-    sku = request.form.get('sku', '').strip()[:80]
-    qty = int(request.form.get('quantity', '0'))
-    val = amount(request.form.get('value'), 'Valor total')
-    stage = request.form.get('stage')
-    shift = request.form.get('shift')
-    location = request.form.get('location', '').strip()[:100]
-    sector = request.form.get('sector', '').strip()[:100]
-    responsible = request.form.get('responsible_name', '').strip()[:120]
-    category = request.form.get('category')
-    cause = request.form.get('cause')
-    severity = request.form.get('severity')
-    lot = request.form.get('lot', '').strip()[:80]
-    raw_expiry = request.form.get('expiry_date', '').strip()
+def parse_damage_form(is_new=True, source=None):
+    source = source if source is not None else request.form
+    product = source.get('product', '').strip()[:160]
+    sku = source.get('sku', '').strip()[:80]
+    qty = int(source.get('quantity', '0'))
+    val = amount(source.get('value'), 'Valor total')
+    stage = source.get('stage')
+    shift = source.get('shift')
+    location = source.get('location', '').strip()[:100]
+    sector = source.get('sector', '').strip()[:100]
+    responsible = source.get('responsible_name', '').strip()[:120]
+    category = source.get('category')
+    cause = source.get('cause')
+    severity = source.get('severity')
+    lot = source.get('lot', '').strip()[:80]
+    raw_expiry = source.get('expiry_date', '').strip()
     expiry = date.fromisoformat(raw_expiry) if raw_expiry else None
-    description = request.form.get('description', '').strip()[:500]
-    requested_site = request.form.get('site_id', '').strip()
+    description = source.get('description', '').strip()[:500]
+    requested_site = source.get('site_id', '').strip()
     user = current_user()
     site_id = user.site_id
     if user.role == 'admin' and requested_site.isdecimal():
@@ -529,7 +591,9 @@ def damage_detail(did):
         if user.role not in ('lider', 'gestor', 'admin'):
             continue
         allowed.append(step)
-    return render_template('detail.html', d=d, history=history, allowed=allowed)
+    return render_template('detail.html', d=d, history=history, allowed=allowed,
+                           sla=get_sla_status(d), action_plans=db.session.execute(
+                               db.select(ActionPlan).where(ActionPlan.damage_id == d.id).order_by(ActionPlan.created_at.desc())).scalars().all())
 
 
 @app.get('/photos/<int:photo_id>')
@@ -675,6 +739,9 @@ def too_large(error):
     flash('Arquivo muito grande. Limite total: 11 MB.', 'error')
     return redirect(url_for('new_damage'))
 
+
+from cba_v3 import register_v3_routes, get_sla_status  # after all models and helpers exist
+register_v3_routes(globals())
 
 if __name__ == '__main__':
     app.run(port=int(os.environ.get('PORT', '5000')))

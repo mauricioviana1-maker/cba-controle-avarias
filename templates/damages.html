@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Ocorrências | CBA 2.0{% endblock %}
+{% block title %}Ocorrências | CBA 3.0{% endblock %}
 {% block content %}
 <div class="page-heading"><div><span class="eyebrow">CONTROLE E RASTREABILIDADE</span><h1>Ocorrências</h1><p>{{total}} registro(s) encontrados • filtros combinados</p></div><div class="page-actions"><a class="button ghost" href="{{url_for('export_csv',**request.args)}}">↓ Exportar CSV</a><a class="button primary" href="{{url_for('new_damage')}}">+ Nova avaria</a></div></div>
 <section class="panel filter-panel"><form method="get" class="filters">
