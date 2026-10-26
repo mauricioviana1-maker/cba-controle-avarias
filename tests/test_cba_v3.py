@@ -1,7 +1,7 @@
 """CBA 3 pilot smoke checks. Use a fresh SQLite database fixture from test_cba.py."""
 import uuid
 import pytest
-from test_cba import csrf, login, damage_payload
+from test_cba import module, csrf, login, damage_payload
 
 
 def test_v3_routes_and_pareto(module):
