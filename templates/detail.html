@@ -1,7 +1,17 @@
 {% extends 'base.html' %}
-{% block title %}Avaria #{{d.id}} | CBA 2.0{% endblock %}
+{% block title %}Avaria #{{d.id}} | CBA 3.0{% endblock %}
 {% block content %}
 <div class="page-heading"><div><a href="{{url_for('damages')}}" class="back">← Todas as ocorrências</a><span class="eyebrow">PROTOCOLO #{{'%05d'|format(d.id)}}</span><h1>{{d.product}}</h1><p>Registrado em {{d.created_at.strftime('%d/%m/%Y às %H:%M')}} · {{d.creator.display_name or d.creator.username}}</p></div><span class="status prominent {{'status-closed' if d.status=='Concluída' else 'status-open'}}">{{d.status}}</span></div>
+<section class="panel"><div class="section-title"><h2>QR Code e SLA</h2></div>
+<p><img src="{{url_for('damage_qr',did=d.id)}}" alt="QR Code para abrir a ocorrência" width="132" height="132" loading="lazy"></p>
+<p class="hint">O QR Code abre esta ocorrência, mas o acesso exige login.</p>
+{% if sla %}<p><strong>SLA:</strong> {{sla.label}}. Prazo: {{sla.due.strftime('%d/%m/%Y %H:%M')}} UTC ({{sla.hours}} horas após abertura).</p>{% endif %}
+{% if viewer.role in ('lider','gestor','admin') %}<p><a class="button ghost" href="{{url_for('plans',damage_id=d.id)}}">Criar plano 5W2H para esta avaria</a></p>{% endif %}
+</section>
+{% if viewer.role in ('lider','gestor','admin') %}<section class="panel"><h2>Planos de ação vinculados</h2>
+{% for p in action_plans %}<p><b>{{p.what}}</b> — {{p.who}}, até {{p.when_due.strftime('%d/%m/%Y')}}. <strong>{{p.status}}</strong></p>{% else %}<p class="muted">Nenhum plano 5W2H cadastrado.</p>{% endfor %}
+</section>{% endif %}
+
 <div class="two-col detail-grid"><div class="stack">
 <section class="panel"><div class="section-title"><h2>Dados da ocorrência</h2><span class="pill light">{{d.severity or 'Não classificada'}}</span></div>
 <div class="kv-grid"><div><small>SKU</small><strong>{{d.sku}}</strong></div><div><small>Quantidade</small><strong>{{d.quantity}}</strong></div><div><small>Perda bruta</small><strong>R$ {{'%.2f'|format(d.value)}}</strong></div><div><small>Valor recuperado</small><strong>R$ {{'%.2f'|format(d.recovery_value or 0)}}</strong></div><div><small>Centro de distribuição</small><strong>{{d.site.name if d.site else 'Registro legado'}}</strong></div><div><small>Setor / Localização</small><strong>{{d.sector or '—'}} · {{d.location}}</strong></div><div><small>Etapa / Turno</small><strong>{{d.stage}} · {{d.shift}}</strong></div><div><small>Responsável informado</small><strong>{{d.responsible_name or '—'}}</strong></div><div><small>Tipo / Causa</small><strong>{{d.category or '—'}} · {{d.cause or '—'}}</strong></div><div><small>Lote / Validade</small><strong>{{d.lot or '—'}} / {{d.expiry_date.strftime('%d/%m/%Y') if d.expiry_date else '—'}}</strong></div><div><small>Destinação</small><strong>{{d.destination or 'Pendente'}}</strong></div><div><small>Aprovada em</small><strong>{{d.approved_at.strftime('%d/%m/%Y %H:%M') if d.approved_at else '—'}}</strong></div></div>
