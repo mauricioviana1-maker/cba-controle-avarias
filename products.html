@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Catálogo de produtos | CBA 3.1{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">CADASTRO MESTRE · ADMINISTRAÇÃO</span><h1>Catálogo de produtos</h1><p>{{count}} SKU(s) cadastrados. Apenas o administrador pode importar ou atualizar o catálogo.</p></div><a href="{{url_for('products_template')}}" class="button ghost">↓ Baixar modelo CSV</a></div>
+<div class="two-col detail-grid">
+<section class="panel"><h2>Importar planilha de SKUs</h2><p class="muted">Exporte sua planilha do Excel como CSV UTF-8, com uma linha por SKU. É obrigatório informar <b>sku</b> e <b>produto</b>; o preço unitário é opcional.</p>
+<form method="post" action="{{url_for('products_import')}}" enctype="multipart/form-data" class="fields vertical">
+<input type="hidden" name="csrf_token" value="{{csrf_token}}">
+<label>Arquivo CSV <input type="file" name="catalog_file" accept=".csv,text/csv" required></label>
+<small>Colunas do modelo: sku;produto;valor_unitario;unidade;marca;ean. Máximo 2 MB e 10.000 produtos por importação. SKUs existentes serão atualizados. Não são apagados os ausentes da planilha.</small>
+<button class="primary" type="submit">Importar / atualizar catálogo</button>
+</form>
+<p class="hint">Produtos sem valor unitário poderão ser utilizados, mas suas avarias aparecerão como <b>valor não informado</b> nos indicadores financeiros.</p>
+</section>
+<section class="panel"><h2>Cadastrar ou atualizar um SKU</h2>
+<form method="post" action="{{url_for('products')}}" class="fields vertical"><input type="hidden" name="csrf_token" value="{{csrf_token}}">
+<label>SKU <input name="sku" required maxlength="80" placeholder="Ex.: SKU-001"></label>
+<label>Nome do produto <input name="produto" required maxlength="160" placeholder="Descrição oficial"></label>
+<label>Valor unitário (R$, opcional) <input name="valor_unitario" placeholder="Ex.: 12,50" inputmode="decimal"></label>
+<label>Unidade <input name="unidade" maxlength="30" placeholder="Ex.: UN ou CX"></label>
+<label>Marca <input name="marca" maxlength="100"></label>
+<label>EAN (opcional) <input name="ean" maxlength="50"></label>
+<button class="primary" type="submit">Salvar produto no catálogo</button></form>
+<p class="hint">Se o SKU já existir, seus dados serão atualizados. Registros de avarias antigos preservam o nome e valor da época do lançamento.</p>
+</section></div>
+<section class="panel"><div class="section-title"><h2>Consultar produtos cadastrados</h2></div>
+<form method="get" class="filters"><label>Buscar SKU ou nome<input name="q" value="{{search}}" placeholder="Digite código ou nome"></label><div class="filter-buttons"><button class="primary" type="submit">Buscar</button><a class="button ghost" href="{{url_for('products')}}">Limpar</a></div></form>
+<div class="table-scroll"><table><thead><tr><th>SKU</th><th>Produto</th><th>Preço unitário</th><th>Unidade / Marca</th><th>Situação</th><th>Ação</th></tr></thead><tbody>
+{% for p in products %}<tr><td><b>{{p.sku}}</b></td><td>{{p.product}}</td><td>{% if p.unit_value is not none %}R$ {{'%.2f'|format(p.unit_value)}}{% else %}<span class="muted">Não informado</span>{% endif %}</td><td>{{p.unit or '—'}}<small class="subcell">{{p.brand or ''}}</small></td><td>{{'Ativo' if p.active else 'Inativo'}}</td><td><form method="post" action="{{url_for('product_toggle',pid=p.id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button class="ghost" type="submit">{{'Desativar' if p.active else 'Ativar'}}</button></form></td></tr>
+{% else %}<tr><td colspan="6">Nenhum SKU encontrado. Cadastre um produto ou importe a planilha.</td></tr>{% endfor %}
+</tbody></table></div><p class="hint">Mostrando até 150 SKUs por consulta. Pesquise por código ou nome para localizar outros produtos.</p></section>
+{% endblock %}

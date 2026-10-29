@@ -1,24 +1,35 @@
-# Relatório de alterações — CBA 2.0.0
+# Registro de alterações — CBA 3.0 (pacote de testes)
 
-## Novidades
-1. Nova identidade visual CBA (sem marcas corporativas), responsiva.
-2. Cadastro com CD, setor, operador informado, lote, vencimento, tipo, causa e criticidade.
-3. Fotos até 3 por lançamento, com compactação JPG e autenticação na leitura.
-4. Histórico auditável de criação, status e tratamento.
-5. Estados de fluxo com análise, aprovação, rejeição e conclusão.
-6. Controle de destino e de valor recuperado; bloqueio de encerramento sem destinação.
-7. Perfis operador, líder, gestor e administrador; CD vinculado ao acesso.
-8. Criação de usuários e centros de distribuição para administrador.
-9. Visão gerencial com indicadores de ocorrências, atrasos e perdas, etapas e causas.
-10. Busca filtrada por SKU, estado, causa, etapa, período e unidade (admin).
-11. Exportação CSV/Excel com identificação por protocolo e redução de risco de injeção de fórmulas.
-12. Fotos guardadas fora de diretório público; limites de quantidade, dimensão e upload.
-13. Cabeçalhos de proteção, CSRF e bloqueio temporário após 5 tentativas falhas em 15 minutos por usuário/IP.
-14. Migração aditiva da base da versão 1.x, sem excluir registros antigos.
-15. Endpoint de saúde `/health` com verificação de banco e versão.
+## Novas funções de gestão
 
-## Não incluído na versão 2.0
-WMS/ERP, scanner, offline/PWA, envio de notificações externas, workflow de ações preventivas, migração para Supabase, SSO/MFA, armazenamento em nuvem de arquivos separado do banco, backup contínuo, relatórios XLSX/PDF e histórico de alterações de campos livres.
+- Pareto com valor por causa e porcentagem acumulada.
+- Identificação de reincidência por SKU, setor e causa.
+- Comparativo entre períodos de igual duração (7 a 365 dias).
+- Ações corretivas 5W2H ligadas aos protocolos de avaria.
+- Políticas de SLA por centro de distribuição e gravidade.
+- Geração manual de relatórios CSV e rotinas automáticas opcionais.
 
-## Necessário antes de usar na empresa
-Revisão de acesso por perfil, homologação da TI, migração para banco persistente, backup/restore testados, proteção de imagens e registros conforme políticas internas e LGPD, avaliação de segurança e performance.
+## Nova mobilidade
+
+- QR Code com endereço de abertura da ocorrência sob autenticação.
+- Offline experimental no navegador, com fila IndexedDB e sincronização sem fotos.
+
+## Inteligência experimental
+
+- Previsão de perdas por médias semanais e desvio-padrão como faixa ilustrativa (sem IA treinada).
+- Assistente de consulta gerencial baseado em regras (sem modelo generativo).
+
+## Segurança e esquema
+
+- Índice único para evitar duplicação de lançamentos offline.
+- Tabelas aditivas para políticas SLA, ações 5W2H e relatórios.
+- Secret opcional `REPORT_JOB_TOKEN` para proteger execução de tarefas.
+- Menus novos visíveis por perfil e testes automatizados expandidos.
+
+## Limitações conhecidas
+
+- É obrigatório testar a migração com cópia do banco antes de publicar.
+- Modo offline sem criptografia local nem fotos: somente dados fictícios.
+- Histórico analisado tem limite de 20 mil linhas por janela e não deve substituir relatórios corporativos completos.
+- Relatórios automáticos necessitam agendamento no GitHub Actions e segredo correspondente no Render.
+- As funções de previsão e assistente são analíticas experimentais, não IA treinada nem LLM.

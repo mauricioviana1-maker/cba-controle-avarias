@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Nova avaria | CBA 3.1{% endblock %}
+{% block content %}
+<div class="page-heading"><div><a href="{{url_for('damages')}}" class="back">← Ocorrências</a><h1>Registrar nova avaria</h1><p>Pesquise e selecione um SKU do catálogo para preencher o produto automaticamente.</p></div></div>
+<form method="post" enctype="multipart/form-data" id="damage-form" class="stack"><input type="hidden" name="csrf_token" value="{{csrf_token}}">
+<section class="panel"><div class="form-section-header"><span class="step">01</span><div><h2>Identificação do produto</h2><p>O nome do produto vem exclusivamente do cadastro mestre.</p></div></div><div class="fields">
+<label class="sku-autocomplete">Código SKU <span class="required">*</span>
+  <input name="sku" id="sku-input" required maxlength="80" autocomplete="off" placeholder="Digite o SKU ou parte dele" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sku-results">
+  <span class="sku-results" id="sku-results" role="listbox" hidden></span>
+  <small id="sku-hint">Digite pelo menos um caractere e escolha uma das sugestões.</small>
+</label>
+<label>Produto (automático) <span class="required">*</span>
+  <input id="product-display" readonly required placeholder="Selecione um SKU acima" aria-describedby="product-hint">
+  <small id="product-hint">Campo bloqueado para edição. O nome é confirmado no servidor.</small>
+</label>
+<label>Quantidade <span class="required">*</span><input type="number" name="quantity" min="1" max="1000000" required></label>
+<label>Lote<input name="lot" maxlength="80" placeholder="Opcional"></label>
+<label>Validade<input type="date" name="expiry_date"></label>
+</div></section>
+<section class="panel"><div class="form-section-header"><span class="step">02</span><div><h2>Processo e responsável</h2><p>Em qual etapa foi identificada a avaria?</p></div></div><div class="fields">
+<label>Centro de distribuição <span class="required">*</span><select name="site_id" {% if viewer.role!='admin' %}disabled{% endif %} required>{% for site in sites %}<option value="{{site.id}}" {% if site.id==viewer.site_id %}selected{% endif %}>{{site.name}}</option>{% endfor %}</select>{% if viewer.role!='admin' %}<input type="hidden" name="site_id" value="{{viewer.site_id}}">{% endif %}</label>
+<label>Setor <span class="required">*</span><input name="sector" required maxlength="100" placeholder="Ex.: Câmara 02"></label>
+<label>Etapa da operação <span class="required">*</span><select name="stage" required>{% for item in stages %}<option>{{item}}</option>{% endfor %}</select></label>
+<label>Turno <span class="required">*</span><select name="shift" required>{% for item in shifts %}<option>{{item}}</option>{% endfor %}</select></label>
+<label>Responsável informado <span class="required">*</span><input name="responsible_name" maxlength="120" required placeholder="Nome informado na ocorrência"></label>
+</div></section>
+<section class="panel"><div class="form-section-header"><span class="step">03</span><div><h2>Classificação e evidências</h2><p>Selecione o tipo, a causa e as fotos da ocorrência.</p></div></div><div class="fields">
+<label>Tipo de avaria <span class="required">*</span><select name="category" required>{% for item in categories %}<option>{{item}}</option>{% endfor %}</select></label>
+<label>Causa provável <span class="required">*</span><select name="cause" required>{% for item in causes %}<option>{{item}}</option>{% endfor %}</select></label>
+<label>Fotos (até 3)<input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple><small>Use câmera ou galeria. Máximo total: 11 MB.</small></label>
+<label class="full">Descrição e observações<textarea name="description" maxlength="500" rows="3" placeholder="Descreva as condições da avaria e informações complementares."></textarea></label>
+</div></section>
+<div class="form-actions"><a class="button ghost" href="{{url_for('dashboard')}}">Cancelar</a><button class="primary" type="submit">Salvar ocorrência e gerar protocolo →</button></div>
+</form>
+{% endblock %}
