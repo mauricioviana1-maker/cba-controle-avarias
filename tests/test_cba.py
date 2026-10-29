@@ -41,6 +41,10 @@ def module(tmp_path_factory):
     sys.modules.pop('app', None)
     mod = importlib.import_module('app')
     mod.app.config['TESTING'] = True
+    with mod.app.app_context():
+        mod.db.session.add(mod.ProductCatalog(sku='SKU-100', product='Produto piloto no catálogo',
+                                              unit_value=__import__('decimal').Decimal('38.88'), unit='UN',active=True))
+        mod.db.session.commit()
     yield mod
 
 
@@ -77,7 +81,7 @@ def test_migrate_legacy_data_and_admin_permissions(module):
 
 def test_health_login_and_new_damage_with_photo(module):
     client = module.app.test_client()
-    assert client.get('/health').json == {'status':'ok','version':'3.0.0'}
+    assert client.get('/health').json == {'status':'ok','version':'3.1.0'}
     assert client.get('/').status_code == 302
     login(client)
     client.get('/damages/new')

@@ -4,3 +4,12 @@
 @media(max-width:600px){.container{padding-left:15px;padding-right:15px}.topbar-inner{height:65px}.logo{font-size:27px}.brand-sub{font-size:8px}.account{font-size:10px}.account strong{max-width:110px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nav-links{gap:15px}.nav-links>a{font-size:12px;padding:13px 1px}.page-content{padding-top:22px}.page-heading{align-items:flex-start;flex-direction:column;gap:14px}.page-heading h1{font-size:28px}.stats{gap:9px}.stat{padding:16px;min-height:142px}.stat strong{font-size:31px}.stat strong.money{font-size:21px}.stat-top{font-size:11px}.panel{padding:17px}.fields{grid-template-columns:1fr}.filters{grid-template-columns:1fr 1fr}.filter-buttons{grid-column:1/-1}.kv-grid{grid-template-columns:1fr 1fr;gap:12px}.kv-grid strong{font-size:12px}.login-layout{display:block;margin:20px auto}.login-side{display:none}.login-panel{padding:24px}.form-actions{flex-direction:column-reverse}.form-actions>*{width:100%;text-align:center}.footer{flex-direction:column}.bar-item{grid-template-columns:100px 1fr 22px;gap:8px}}
 
 .bar-progress{appearance:none;width:100%;height:9px;border:0;border-radius:20px;overflow:hidden;background:#eef3f7}.bar-progress::-webkit-progress-bar{background:#eef3f7;border-radius:20px}.bar-progress::-webkit-progress-value{background:#16a9a4;border-radius:20px}.bar-progress::-moz-progress-bar{background:#16a9a4;border-radius:20px}
+
+/* CBA 3.1: sugestões de SKU com seleção obrigatória. */
+.sku-autocomplete { position: relative; }
+.sku-results { position: absolute; top: 76%; left: 0; right: 0; z-index: 50; padding: 5px; background: #fff; border: 1px solid #c7d2de; border-radius: 9px; box-shadow: 0 14px 27px rgba(8,34,64,.18); max-height: 280px; overflow-y: auto; }
+.sku-results[hidden] { display: none; }
+.sku-choice { display: flex; align-items: flex-start; flex-direction: column; gap: 3px; width: 100%; padding: 10px 12px; text-align: left; background: #fff; border: 0; border-bottom: 1px solid #eef2f6; border-radius: 4px; color: #173451; cursor: pointer; }
+.sku-choice:hover, .sku-choice:focus, .sku-choice.is-active { background: #e8f1f9; outline: none; }
+.sku-choice span { font-size: .88rem; color: #516679; }
+#product-display[readonly] { background: #edf3f7; color: #18354d; font-weight: 650; cursor: not-allowed; }

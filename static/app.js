@@ -12,7 +12,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const form = document.getElementById('damage-form');
   if (form) {
-    form.addEventListener('submit', () => {
+    form.addEventListener('submit', (event) => {
+      if (event.defaultPrevented) return;
+      const sku = document.getElementById('sku-input');
+      const product = document.getElementById('product-display');
+      if (sku && product && !product.value) return;
       const button = form.querySelector('button[type=submit]');
       if (button) { button.disabled = true; button.textContent = 'Salvando ocorrência…'; }
     });

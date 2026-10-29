@@ -1,4 +1,4 @@
-"""CBA 2.0 — Controle de Avarias | Pilot application.
+"""CBA 3.1 — Controle de Avarias | Pilot application.
 
 Flask + PostgreSQL. Existing CBA 1.x user/damage data are retained by additive migration.
 Photographs reside in protected DB records for this pilot; migrate to private object
@@ -18,23 +18,23 @@ from uuid import UUID
 import qrcode
 import secrets
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
 
-from flask import (Flask, Response, abort, flash, redirect, render_template,
+from flask import (Flask, Response, abort, flash, jsonify, redirect, render_template,
                    request, send_file, session, url_for)
 from flask_sqlalchemy import SQLAlchemy
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import func, inspect, or_, text
 from werkzeug.security import check_password_hash, generate_password_hash
 
-VERSION = '3.0.0'
+VERSION = '3.1.0'
 ROLES = {'operador', 'lider', 'gestor', 'admin'}
 STAGES = ('Recebimento', 'Armazenagem', 'Separação', 'Expedição', 'Transporte', 'Outros')
 SHIFTS = ('1º turno', '2º turno', '3º turno')
 CAUSES = ('Não identificada', 'Queda', 'Esmagamento', 'Vazamento', 'Ruptura de embalagem',
           'Manuseio inadequado', 'Transporte', 'Vencimento', 'Outros')
-CATEGORIES = ('Produto danificado', 'Embalagem', 'Palete', 'Validade', 'Outros')
+CATEGORIES = ('Produto danificado', 'Embalagem', 'Outros')
 SEVERITIES = ('Baixa', 'Média', 'Alta', 'Crítica')
 DESTINATIONS = ('', 'Reembalagem', 'Reaproveitamento', 'Devolução', 'Descarte', 'Retrabalho', 'Outros')
 STATUSES = ('Aberta', 'Em análise', 'Aguardando aprovação', 'Aprovada', 'Rejeitada', 'Concluída')
@@ -125,6 +125,22 @@ class Damage(db.Model):
     approved_by = db.relationship('User', foreign_keys=[approved_by_id])
     resolved_at = db.Column(db.DateTime(timezone=True))
     offline_key = db.Column(db.String(64), unique=True)
+    value_known = db.Column(db.Boolean, nullable=False, default=True)
+
+
+class ProductCatalog(db.Model):
+    """Cadastro mestre compartilhado entre CDs; a avaria mantém snapshot histórico."""
+    __tablename__ = 'product_catalog'
+    id = db.Column(db.Integer, primary_key=True)
+    sku = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    product = db.Column(db.String(160), nullable=False)
+    unit_value = db.Column(db.Numeric(12, 2))  # None: preço não informado
+    unit = db.Column(db.String(30))
+    brand = db.Column(db.String(100))
+    ean = db.Column(db.String(50))
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_utc)
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=now_utc)
 
 
 class DamagePhoto(db.Model):
@@ -217,7 +233,7 @@ ADDITIONS = {
         'updated_at': 'TIMESTAMP WITH TIME ZONE',
         'approved_at': 'TIMESTAMP WITH TIME ZONE',
         'approved_by_id': 'INTEGER', 'resolved_at': 'TIMESTAMP WITH TIME ZONE',
-        'offline_key': 'VARCHAR(64)',
+        'offline_key': 'VARCHAR(64)', 'value_known': 'BOOLEAN DEFAULT TRUE',
     },
 }
 
@@ -462,15 +478,16 @@ def dashboard():
     total = len(records)
     opened = sum(d.status not in ('Concluída', 'Rejeitada') for d in records)
     overdue = sum(aging(d) for d in records)
-    losses = sum((d.value or Decimal('0')) for d in records)
-    recovered = sum((d.recovery_value or Decimal('0')) for d in records)
+    losses = sum((d.value or Decimal('0')) for d in records if d.value_known is not False)
+    recovered = sum((d.recovery_value or Decimal('0')) for d in records if d.value_known is not False)
+    missing_value_count = sum(d.value_known is False for d in records)
     stages = sorted([(s, sum(1 for d in records if d.stage == s)) for s in STAGES],
                     key=lambda x: x[1], reverse=True)
     causes_count = sorted([(s, sum(1 for d in records if d.cause == s)) for s in CAUSES],
                           key=lambda x: x[1], reverse=True)[:5]
     return render_template('dashboard.html', records=records[:12], total=total, opened=opened,
                            overdue=overdue, losses=losses, recovered=recovered, stages=stages,
-                           causes_count=causes_count, max_stage=max((v for _, v in stages), default=1) or 1)
+                           causes_count=causes_count, missing_value_count=missing_value_count, max_stage=max((v for _, v in stages), default=1) or 1)
 
 
 @app.get('/damages')
@@ -495,37 +512,56 @@ def amount(raw, field='valor'):
 
 
 def parse_damage_form(is_new=True, source=None):
+    """NEVER trust product name, price, severity or location submitted by the browser.
+
+    All new records use an active SKU from the master catalogue. Historical
+    records retain their previous product names and valuations.
+    """
     source = source if source is not None else request.form
-    product = source.get('product', '').strip()[:160]
-    sku = source.get('sku', '').strip()[:80]
-    qty = int(source.get('quantity', '0'))
-    val = amount(source.get('value'), 'Valor total')
+    sku = str(source.get('sku', '')).strip().upper()
+    catalog = db.session.scalar(db.select(ProductCatalog).where(
+        ProductCatalog.sku == sku, ProductCatalog.active.is_(True)))
+    if not catalog:
+        raise ValueError('Selecione um SKU ativo existente no catálogo de produtos.')
+    try:
+        qty = int(source.get('quantity', '0'))
+    except (TypeError, ValueError):
+        raise ValueError('Informe uma quantidade inteira válida.')
+    if qty < 1 or qty > 1000000:
+        raise ValueError('Quantidade deve estar entre 1 e 1.000.000.')
     stage = source.get('stage')
     shift = source.get('shift')
-    location = source.get('location', '').strip()[:100]
-    sector = source.get('sector', '').strip()[:100]
-    responsible = source.get('responsible_name', '').strip()[:120]
+    sector = str(source.get('sector', '')).strip()[:100]
+    responsible = str(source.get('responsible_name', '')).strip()[:120]
     category = source.get('category')
     cause = source.get('cause')
-    severity = source.get('severity')
-    lot = source.get('lot', '').strip()[:80]
-    raw_expiry = source.get('expiry_date', '').strip()
-    expiry = date.fromisoformat(raw_expiry) if raw_expiry else None
-    description = source.get('description', '').strip()[:500]
-    requested_site = source.get('site_id', '').strip()
+    lot = str(source.get('lot', '')).strip()[:80]
+    raw_expiry = str(source.get('expiry_date', '')).strip()
+    try:
+        expiry = date.fromisoformat(raw_expiry) if raw_expiry else None
+    except ValueError:
+        raise ValueError('Validade inválida. Confira a data.')
+    description = str(source.get('description', '')).strip()[:500]
+    requested_site = str(source.get('site_id', '')).strip()
     user = current_user()
     site_id = user.site_id
     if user.role == 'admin' and requested_site.isdecimal():
         site_id = int(requested_site)
-    if not (product and sku and location and sector and responsible and 0 < qty <= 1000000):
-        raise ValueError('Preencha produto, SKU, quantidade, setor, local e responsável.')
-    if stage not in STAGES or shift not in SHIFTS or category not in CATEGORIES or cause not in CAUSES or severity not in SEVERITIES:
+    if not (sector and responsible):
+        raise ValueError('Preencha setor e responsável.')
+    if stage not in STAGES or shift not in SHIFTS or category not in CATEGORIES or cause not in CAUSES:
         raise ValueError('Selecione os campos de classificação corretamente.')
-    if not site_id or not db.session.get(Site, site_id):
-        raise ValueError('Selecione um CD válido.')
-    return dict(product=product, sku=sku, quantity=qty, value=val, stage=stage, shift=shift,
-                location=location, description=description, site_id=site_id, sector=sector,
-                responsible_name=responsible, category=category, cause=cause, severity=severity,
+    site = db.session.get(Site, site_id) if site_id else None
+    if not site or not site.active:
+        raise ValueError('Selecione um CD ativo válido.')
+    value_known = catalog.unit_value is not None
+    value = (catalog.unit_value * qty).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) if value_known else Decimal('0.00')
+    if value > Decimal('9999999999.99'):
+        raise ValueError('Quantidade ultrapassa o limite monetário do sistema.')
+    return dict(product=catalog.product, sku=catalog.sku, quantity=qty, value=value,
+                value_known=value_known, stage=stage, shift=shift,
+                location='Não informado', description=description, site_id=site_id, sector=sector,
+                responsible_name=responsible, category=category, cause=cause, severity='Média',
                 lot=lot, expiry_date=expiry)
 
 
@@ -570,7 +606,7 @@ def new_damage():
         for name, raw in photos:
             db.session.add(DamagePhoto(damage_id=damage.id, name=name, mime_type='image/jpeg',
                                        data=raw, uploader_id=current_user().id))
-        audit('criação', damage, f'Nova avaria. {len(photos)} foto(s).')
+        audit('criação', damage, f'Nova avaria vinculada ao catálogo SKU {damage.sku}; preço '+('disponível' if damage.value_known else 'não informado')+f'; {len(photos)} foto(s).')
         db.session.commit()
         flash(f'Avaria #{damage.id} registrada com sucesso.', 'success')
         return redirect(url_for('damage_detail', did=damage.id))
@@ -645,6 +681,9 @@ def treatment(did):
     except ValueError as exc:
         flash(str(exc), 'error')
         return redirect(url_for('damage_detail', did=did))
+    if not d.value_known and recovered > 0:
+        flash('Não é possível lançar recuperação financeira sem preço cadastrado para a avaria.', 'error')
+        return redirect(url_for('damage_detail', did=did))
     if recovered > d.value:
         flash('Valor recuperado não pode superar o valor da avaria.', 'error')
         return redirect(url_for('damage_detail', did=did))
@@ -663,14 +702,15 @@ def export_csv():
     records = db.session.execute(filter_query(visible_query(current_user())).order_by(Damage.created_at.desc()).limit(10000)).scalars().all()
     stream = io.StringIO()
     writer = csv.writer(stream, delimiter=';')
-    writer.writerow(['ID','Data UTC','CD','Setor','Produto','SKU','Quantidade','Valor avaria','Valor recuperado',
+    writer.writerow(['ID','Data UTC','CD','Setor','Produto','SKU','Quantidade','Valor avaria','Valor recuperado','Valor conhecido',
                      'Turno','Etapa','Local','Tipo','Causa','Gravidade','Lote','Validade','Responsável','Destinação','Status'])
     def safe_csv(value):
         s = str(value or '')
         return "'" + s if s.startswith(('=', '+', '-', '@', '\t', '\r')) else s
     for d in records:
         writer.writerow([d.id, d.created_at.isoformat(), safe_csv(d.site.name if d.site else ''), safe_csv(d.sector),
-                         safe_csv(d.product), safe_csv(d.sku), d.quantity, d.value, d.recovery_value or 0,
+                         safe_csv(d.product), safe_csv(d.sku), d.quantity, d.value if d.value_known is not False else '', d.recovery_value or 0,
+                         'Sim' if d.value_known is not False else 'Não',
                          safe_csv(d.shift), safe_csv(d.stage), safe_csv(d.location), safe_csv(d.category),
                          safe_csv(d.cause), safe_csv(d.severity), safe_csv(d.lot), d.expiry_date or '',
                          safe_csv(d.responsible_name), safe_csv(d.destination), safe_csv(d.status)])
@@ -742,6 +782,9 @@ def too_large(error):
 
 from cba_v3 import register_v3_routes, get_sla_status  # after all models and helpers exist
 register_v3_routes(globals())
+
+from cba_catalog import register_catalog_routes
+register_catalog_routes(globals())
 
 if __name__ == '__main__':
     app.run(port=int(os.environ.get('PORT', '5000')))

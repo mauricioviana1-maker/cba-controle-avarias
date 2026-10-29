@@ -86,6 +86,8 @@ def register_v3_routes(g):
         return rows, total
 
     def loss(d):
+        if d.value_known is False:
+            return Decimal('0')  # Excluído de indicadores monetários; alertas são exibidos na interface.
         return max(Decimal('0'), (d.value or Decimal('0')) - (d.recovery_value or Decimal('0')))
 
     @app.get('/analytics')
@@ -121,9 +123,13 @@ def register_v3_routes(g):
         curr_loss = sum((loss(d) for d in rows), Decimal(0))
         prev_loss = sum((loss(d) for d in prev), Decimal(0))
         delta = round(float((curr_loss-prev_loss)/prev_loss*100),1) if prev_loss else None
+        without_price = sum(d.value_known is False for d in rows)
+        prev_without_price = sum(d.value_known is False for d in prev)
         return render_template('analytics.html',days=days,pareto=pareto,repeat=repeat,
                                total=total,prior_count=prior_count,curr_loss=curr_loss,
-                               prev_loss=prev_loss,change=delta,partial=total>len(rows) or prior_count>len(prev))
+                               prev_loss=prev_loss,change=delta,
+                               without_price=without_price,prev_without_price=prev_without_price,
+                               partial=total>len(rows) or prior_count>len(prev))
 
     @app.get('/sla')
     @require_role('lider','gestor','admin')
@@ -211,13 +217,16 @@ def register_v3_routes(g):
                Damage.created_at>=begin,Damage.created_at<end).order_by(Damage.created_at.desc()).limit(20000)).scalars().all()
         o=io.StringIO()
         writer=csv.writer(o,delimiter=';')
-        writer.writerow(['ID','Data UTC','SKU','Produto','Causa','Setor','Status','Valor bruto','Valor recuperado','Perda líquida'])
+        writer.writerow(['ID','Data UTC','SKU','Produto','Causa','Setor','Status','Valor bruto','Valor recuperado','Perda líquida','Valor conhecido'])
         def clean(s):
             s=str(s or '')
             return "'"+s if s.startswith(('=','+','-','@','\t','\r')) else s
         for d in data:
             writer.writerow([d.id,d.created_at.isoformat(),clean(d.sku),clean(d.product),clean(d.cause),
-                             clean(d.sector),clean(d.status),str(d.value),str(d.recovery_value or 0),str(loss(d))])
+                             clean(d.sector),clean(d.status),str(d.value) if d.value_known is not False else '',
+                             str(d.recovery_value or 0) if d.value_known is not False else '',
+                             str(loss(d)) if d.value_known is not False else '',
+                             'Sim' if d.value_known is not False else 'Não'])
         return ('\ufeff'+o.getvalue()).encode('utf-8'),len(data)
 
     def run_due_reports(site_id=None,force=False):
@@ -386,8 +395,10 @@ def register_v3_routes(g):
     @require_role('gestor','admin')
     def forecast():
         rows,total=history(days=365,limit=20000)
-        estimate=weekly_forecast(rows) if total<=len(rows) else None
-        return render_template('forecast.html',forecast=estimate,count=total,partial=total>len(rows))
+        without_price = sum(d.value_known is False for d in rows)
+        estimate=weekly_forecast(rows) if total<=len(rows) and not without_price else None
+        return render_template('forecast.html',forecast=estimate,count=total,
+                               without_price=without_price,partial=total>len(rows))
 
     def normalize(s):
         return ''.join(c for c in unicodedata.normalize('NFKD',s.lower()) if not unicodedata.combining(c))
@@ -399,6 +410,9 @@ def register_v3_routes(g):
             return 'Há mais de 20.000 registros no período; use o relatório completo antes de concluir a análise.'
         if not rows:
             return 'Não há registros no seu escopo nos últimos 30 dias.'
+        needs_finance = any(x in q for x in ('perda','financeir','valor','custo','previs','projec','sku','produto','setor','area','causa','motivo'))
+        if needs_finance and any(d.value_known is False for d in rows):
+            return 'A consulta financeira está incompleta: há avarias sem preço unitário no catálogo. Cadastre os preços e registre novos lançamentos para recuperar a avaliação financeira.'
         if 'sla' in q or 'atras' in q:
             late=[d for d in rows if get_sla_status(d)['late'] and d.status!='Concluída']
             return f'Nos últimos 30 dias, {len(late)} ocorrências ainda abertas estão fora do SLA. Consulte a página SLA para os protocolos.'
