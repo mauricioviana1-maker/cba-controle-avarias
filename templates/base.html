@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#122e4b">
-  <meta name="description" content="CBA 3.0 — Controle de Avarias Operacionais">
-  <title>{% block title %}CBA 3.0 | Controle de Avarias{% endblock %}</title>
+  <meta name="description" content="CBA 3.1 — Controle de Avarias Operacionais">
+  <title>{% block title %}CBA 3.1 | Controle de Avarias{% endblock %}</title>
   <link rel="manifest" href="{{url_for('static',filename='manifest.webmanifest')}}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -14,7 +14,7 @@
     <div class="container topbar-inner">
       <a class="brand" href="{{ url_for('dashboard') }}" aria-label="CBA — início">
         <span class="logo">CBA<span class="logo-dot">.</span></span>
-        <span class="brand-sub">CONTROLE DE AVARIAS <em>3.0</em></span>
+        <span class="brand-sub">CONTROLE DE AVARIAS <em>3.1</em></span>
       </a>
       {% if viewer %}
       <div class="account"><span class="user-avatar">{{ viewer.username[:1]|upper }}</span><div><strong>{{ viewer.display_name or viewer.username }}</strong><small>{{ viewer.role|capitalize }}</small></div></div>
@@ -36,7 +36,8 @@
     <a href="{{url_for('forecast')}}" class="{% if request.path=='/forecast' %}active{% endif %}">Previsões</a>
     <a href="{{url_for('assistant')}}" class="{% if request.path=='/assistant' %}active{% endif %}">Assistente</a>
     {% endif %}
-    <a href="/static/offline.html">Modo offline (piloto)</a>
+    <a href="/static/offline.html">Modo offline (fila antiga)</a>
+    {% if viewer.role=='admin' %}<a href="{{url_for('products')}}" class="{% if request.path == '/products' %}active{% endif %}">Catálogo de produtos</a>{% endif %}
     {% if viewer.role in ('gestor','admin') %}<a href="{{url_for('users')}}" class="{% if request.path == '/users' %}active{% endif %}">Usuários</a>{% endif %}
     {% if viewer.role == 'admin' %}<a href="{{url_for('sites')}}" class="{% if request.path == '/sites' %}active{% endif %}">Centros de distribuição</a>{% endif %}
     <form method="post" action="{{url_for('logout')}}" class="logout"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button type="submit">Sair ↗</button></form>
@@ -48,7 +49,8 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
-  <footer class="footer container"><span>CBA <strong>3.0</strong> · Ambiente piloto</span><span>Use apenas dados fictícios · Não homologado para produção</span></footer>
+  <footer class="footer container"><span>CBA <strong>3.1</strong> · Ambiente piloto</span><span>Use apenas dados fictícios · Não homologado para produção</span></footer>
   <script src="{{url_for('static',filename='app.js')}}" defer></script>
+  {% if request.path == '/damages/new' %}<script src="{{url_for('static',filename='catalog.js')}}" defer></script>{% endif %}
 </body>
 </html>

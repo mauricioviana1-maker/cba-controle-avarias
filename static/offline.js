@@ -54,16 +54,6 @@
     if(sent) status(`${sent} ocorrência(s) enviada(s) com sucesso.`);
     await render();
   }
-  id('offline-form').addEventListener('submit',async event=>{
-    event.preventDefault();
-    let owner=onlineUser || localStorage.getItem('cba_offline_owner');
-    if(!owner){const u=await identity();owner=u?.username;}
-    if(!owner){status('Abra o CBA e faça login ao menos uma vez neste aparelho antes de usar o modo offline.');return;}
-    const data=Object.fromEntries(new FormData(event.target).entries());
-    data.offline_key=crypto.randomUUID();data.owner=owner;data.saved_at=new Date().toISOString();
-    await save(data);event.target.reset();await render();
-    status('Salvo apenas no dispositivo. Clique em Sincronizar agora quando houver internet.');
-  });
   id('sync').addEventListener('click',sync);
   window.addEventListener('online',()=>{render();sync();});
   window.addEventListener('offline',render);
